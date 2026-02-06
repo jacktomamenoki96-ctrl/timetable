@@ -75,7 +75,16 @@ class TimetableSolver:
                     var for (lid, uid, ts, room_id, tid), var in self.variables.items()
                     if lid == lesson.id and uid == unit_index
                 ]
-...
+                # 必ず1つが選択される
+                if unit_vars:
+                    self.model.Add(sum(unit_vars) == 1)
+        
+        # 制約2: 同一Lessonの異なるunitは異なるtimeslotに配置
+        for lesson in self.lessons.values():
+            if lesson.units > 1:
+                for unit1 in range(lesson.units):
+                    for unit2 in range(unit1 + 1, lesson.units):
+                        # unit1とunit2が同じtimeslotに配置されることを禁止
                         for timeslot in self.timeslots:
                             vars_unit1 = [
                                 var for (lid, uid, ts, room_id, tid), var in self.variables.items()
@@ -85,7 +94,10 @@ class TimetableSolver:
                                 var for (lid, uid, ts, room_id, tid), var in self.variables.items()
                                 if lid == lesson.id and uid == unit2 and ts == timeslot
                             ]
-...
+                            # 両方が選択されることはない（最大1つ）
+                            if vars_unit1 and vars_unit2:
+                                self.model.Add(sum(vars_unit1) + sum(vars_unit2) <= 1)
+        
         # 制約3: 教員競合 - 同一教員は同じtimeslotに1つの授業のみ
         for teacher_id in self.teachers.keys():
             for timeslot in self.timeslots:
@@ -115,7 +127,22 @@ class TimetableSolver:
                 ]
                 if class_vars:
                     self.model.Add(sum(class_vars) <= 1)
-...
+        
+        # 制約6: 同期制約 - 同じsynchronization_idを持つLessonは同じtimeslotに配置
+        sync_groups: Dict[str, List[Lesson]] = {}
+        for lesson in self.lessons.values():
+            if lesson.synchronization_id:
+                if lesson.synchronization_id not in sync_groups:
+                    sync_groups[lesson.synchronization_id] = []
+                sync_groups[lesson.synchronization_id].append(lesson)
+        
+        for sync_id, sync_lessons in sync_groups.items():
+            # 同期グループ内の全Lessonが同じtimeslotに配置されるようにする
+            if len(sync_lessons) > 1:
+                # 基準となる最初のLesson
+                base_lesson = sync_lessons[0]
+                
+                for unit_index in range(base_lesson.units):
                     # 基準Lessonの各unitについて
                     for timeslot in self.timeslots:
                         # 基準Lessonがこのtimeslotに配置される変数
