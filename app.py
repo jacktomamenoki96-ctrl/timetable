@@ -321,19 +321,19 @@ def main():
     
     with col1:
         st.subheader("教員データ")
-        teachers_file = st.file_uploader("教員CSV", type=['csv'], key='teachers')
+        teachers_file = st.file_uploader("教員CSV", type=['csv'], key='teachers_upload')
     
     with col2:
         st.subheader("教室データ")
-        rooms_file = st.file_uploader("教室CSV", type=['csv'], key='rooms')
+        rooms_file = st.file_uploader("教室CSV", type=['csv'], key='rooms_upload')
     
     with col3:
         st.subheader("クラスデータ")
-        classes_file = st.file_uploader("クラスCSV", type=['csv'], key='classes')
+        classes_file = st.file_uploader("クラスCSV", type=['csv'], key='classes_upload')
     
     with col4:
         st.subheader("授業データ")
-        lessons_file = st.file_uploader("授業CSV", type=['csv'], key='lessons')
+        lessons_file = st.file_uploader("授業CSV", type=['csv'], key='lessons_upload')
     
     # データの読み込みと検証
     if teachers_file and rooms_file and classes_file and lessons_file:
