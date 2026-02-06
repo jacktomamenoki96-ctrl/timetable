@@ -281,7 +281,11 @@ class TimetableSolver:
                         self.model.Add(trans_var == left)
                     else:
                         # 両方変数
-                        self.model.AddBoolXor([left, right, trans_var])
+                        # AddBoolXor が古いバージョンで使えない場合があるため、Reification（OnlyEnforceIf）で実装
+                        # trans_var == 1 <-> left != right
+                        self.model.Add(left != right).OnlyEnforceIf(trans_var)
+                        # trans_var == 0 <-> left == right
+                        self.model.Add(left == right).OnlyEnforceIf(trans_var.Not())
                     
                     transitions.append(trans_var)
                 
