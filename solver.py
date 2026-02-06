@@ -61,7 +61,8 @@ class TimetableSolver:
                             if teacher.is_available(timeslot):
                                 var_name = f"L{lesson.id}_U{unit_index}_T{timeslot}_R{room.id}_Teach{teacher_id}"
                                 var = self.model.NewBoolVar(var_name)
-                                self.variables[(lesson.id, unit_index, timeslot, room, teacher_id)] = var
+                                # キーをオブジェクトではなくID（文字列やタプル）に変更してハッシュ化エラーを回避
+                                self.variables[(lesson.id, unit_index, timeslot, room.id, teacher_id)] = var
     
     def add_hard_constraints(self):
         """全てのハード制約をモデルに追加"""
@@ -192,9 +193,10 @@ class TimetableSolver:
             # 解から時間割を構築
             timetable = Timetable()
             
-            for (lesson_id, unit_index, timeslot, room, teacher_id), var in self.variables.items():
+            for (lesson_id, unit_index, timeslot, room_id, teacher_id), var in self.variables.items():
                 if solver.Value(var) == 1:
                     lesson = self.lessons[lesson_id]
+                    room = self.rooms[room_id]
                     assignment = Assignment(
                         lesson=lesson,
                         timeslot=timeslot,
