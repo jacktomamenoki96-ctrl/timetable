@@ -166,6 +166,127 @@ class TimetableSolver:
                                     # base_varsが選択されている ⇔ other_varsが選択されている
                                     # sum(base_vars) == sum(other_vars)
                                     self.model.Add(sum(base_vars) == sum(other_vars))
+
+        # --- 追加制約: 品質の向上 ---
+        
+        # 制約7: 同じクラスで同じ科目は1日1回まで（単位数が多い場合は許容）
+        # (例: 週4コマなら1日1回。週6コマならどこかで1日2回必要)
+        import math
+        
+        # クラスごとの科目単位数を集計
+        class_subject_units: Dict[str, Dict[str, int]] = {}
+        for lesson in self.lessons.values():
+            for class_id in lesson.class_ids:
+                if class_id not in class_subject_units:
+                    class_subject_units[class_id] = {}
+                if lesson.subject not in class_subject_units[class_id]:
+                    class_subject_units[class_id][lesson.subject] = 0
+                class_subject_units[class_id][lesson.subject] += lesson.units
+        
+        # 制約適用
+        for class_id in self.classes.keys():
+            if class_id not in class_subject_units:
+                continue
+                
+            for subject, total_units in class_subject_units[class_id].items():
+                # 1日あたりの最大回数 (基本1回、5コマ超えるなら2回...)
+                # 週5日制を前提
+                daily_limit = math.ceil(total_units / 5.0)
+                
+                # 対象となるLessonIDのリスト（このクラス・科目のもの）
+                target_lesson_ids = [
+                    l.id for l in self.lessons.values() 
+                    if class_id in l.class_ids and l.subject == subject
+                ]
+                
+                for weekday in Weekday.all():
+                    # その曜日の該当科目の変数を収集
+                    subject_vars_on_day = []
+                    for period in range(1, 7):
+                        ts = TimeSlot(weekday, period)
+                        # このtimeslotにある対象Lessonの変数
+                        vars_in_slot = [
+                            var for (lid, uid, t, r_id, tid), var in self.variables.items()
+                            if lid in target_lesson_ids and t == ts
+                        ]
+                        subject_vars_on_day.extend(vars_in_slot)
+                    
+                    if subject_vars_on_day:
+                        self.model.Add(sum(subject_vars_on_day) <= daily_limit)
+
+        # 制約8: クラスの時間割に空きコマ（中抜け）を作らない
+        # 朝から詰める、または連続させる
+        for class_id in self.classes.keys():
+            for weekday in Weekday.all():
+                # 各時限(1-6)が「埋まっているか」を表すブール変数を作成
+                is_active = []
+                for period in range(1, 7):
+                    ts = TimeSlot(weekday, period)
+                    
+                    # このクラスのこの時間の授業変数すべて
+                    vars_in_slot = [
+                        var for (lid, uid, t, r_id, tid), var in self.variables.items()
+                        if t == ts and class_id in self.lessons[lid].class_ids
+                    ]
+                    
+                    slot_active_var = self.model.NewBoolVar(f"Active_{class_id}_{weekday}_{period}")
+                    if vars_in_slot:
+                        # 授業が1つでもあれば Active=1
+                        self.model.AddMaxEquality(slot_active_var, vars_in_slot)
+                    else:
+                        # 授業の候補すらなければ Active=0
+                        self.model.Add(slot_active_var == 0)
+                    
+                    is_active.append(slot_active_var)
+                
+                # 連続性を保証するためのロジック:
+                # 0 -> 1 と 1 -> 0 の変化（トランジション）の回数が合計2回以内であれば、
+                # 1の塊は1つだけ（または0個）になる。
+                # 例: 0 0 1 1 1 0 (OK: 変化2回)
+                # 例: 0 1 0 1 0 0 (NG: 変化4回 -> 中抜けあり)
+                
+                # パディング（前後は0）
+                padded_active = [0] + is_active + [0]
+                
+                transitions = []
+                for i in range(len(padded_active) - 1):
+                    # i と i+1 が違うなら 1
+                    trans_var = self.model.NewBoolVar(f"Trans_{class_id}_{weekday}_{i}")
+                    # XORではなく不等価性で実装
+                    # (padded_active[i] != padded_active[i+1])
+                    
+                    # NOTE: padded_activeの要素は IntVar(0/1) または int(0)
+                    # 整数0は cp_model では直接扱えない場合があるため、これらを統一的に扱う
+                    
+                    left = padded_active[i]
+                    right = padded_active[i+1]
+                    
+                    # left != right を表現
+                    # trans_var == 1 <-> left + right == 1 (どちらか片方だけ1)
+                    # trans_var == 0 <-> left + right != 1 (0+0=0, 1+1=2)
+                    
+                    # 式: trans_var == (left + right == 1)
+                    # これは線形制約ではない論理式なので AddBoolXor などを使うべきだが、
+                    # left/rightが定数0の場合があるので注意して構築
+                    
+                    if isinstance(left, int) and isinstance(right, int):
+                        # 両方定数（ありえないが念のため）
+                        val = 1 if left != right else 0
+                        self.model.Add(trans_var == val)
+                    elif isinstance(left, int):
+                        # left=0
+                        self.model.Add(trans_var == right)
+                    elif isinstance(right, int):
+                        # right=0
+                        self.model.Add(trans_var == left)
+                    else:
+                        # 両方変数
+                        self.model.AddBoolXor([left, right, trans_var])
+                    
+                    transitions.append(trans_var)
+                
+                # トランジション回数 <= 2 に制約することで中抜けを禁止
+                self.model.Add(sum(transitions) <= 2)
     
     def solve(self, timeout_seconds: int = 60) -> Optional[Timetable]:
         """
