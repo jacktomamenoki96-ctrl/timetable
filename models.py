@@ -63,20 +63,23 @@ class TimeSlot:
         return slots
 
 
-@dataclass
+@dataclass(frozen=True)
 class Teacher:
     """教員エンティティ"""
     id: str
     name: str
     # 担当可能時間マトリクス: availability[weekday.value][period-1] = True/False
-    availability: List[List[bool]] = field(default_factory=lambda: [[True] * 6 for _ in range(5)])
+    availability: List[List[bool]] = field(default_factory=lambda: [[True] * 6 for _ in range(5)], hash=False)
 
     def is_available(self, timeslot: TimeSlot) -> bool:
         """指定時間枠で担当可能かチェック"""
         return self.availability[timeslot.weekday.value][timeslot.period - 1]
 
     def set_availability(self, timeslot: TimeSlot, available: bool):
-        """担当可能時間を設定"""
+        """担当可能時間を設定 (frozenのため新しいリストを設定することはできないが、中身のboolは変えられる...いや、frozenだとself.availabilityへの再代入も禁止されるため、中身を変更する設計にするか、あるいはavailabilityをタプルにする必要がある)
+        ここでは簡易的に、availabilityの中身(mutable list)を書き換えるアプローチをとる。
+        frozen=Trueでも、フィールドがmutable(List)ならその中身は変更可能。
+        """
         self.availability[timeslot.weekday.value][timeslot.period - 1] = available
 
     @classmethod
@@ -90,7 +93,7 @@ class Teacher:
         return cls(id=id, name=name, availability=[[False] * 6 for _ in range(5)])
 
 
-@dataclass
+@dataclass(frozen=True)
 class Room:
     """教室エンティティ"""
     id: str
@@ -102,7 +105,7 @@ class Room:
         return f"{self.name}({self.room_type.value}, 定員{self.capacity})"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Class:
     """HRクラス（ホームルームクラス）エンティティ"""
     id: str
@@ -113,7 +116,7 @@ class Class:
         return f"{self.name}({self.size}名)"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Lesson:
     """授業タスクエンティティ"""
     id: str
@@ -137,7 +140,7 @@ class Lesson:
         return f"{self.subject} (週{self.units}コマ){sync_info}"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Assignment:
     """授業配置: 1つのLessonを特定のTimeSlot、Room、Teacherに割り当て"""
     lesson: Lesson

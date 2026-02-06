@@ -279,8 +279,8 @@ def main():
     
     solver_type = st.sidebar.selectbox(
         "ソルバーの種類",
-        ["バックトラック法", "OR-Tools (高速)"] if ORTOOLS_AVAILABLE else ["バックトラック法"],
-        help="OR-Toolsが利用可能な場合は高速に解を見つけます"
+        ["OR-Tools (推奨: 高精度)", "バックトラック法"] if ORTOOLS_AVAILABLE else ["バックトラック法"],
+        help="Googleの最適化エンジンを使用し、複雑な制約でも高精度な時間割を生成します"
     )
     
     if solver_type == "バックトラック法":
@@ -299,7 +299,7 @@ def main():
             max_value=600,
             value=120,
             step=10,
-            help="OR-Toolsソルバーのタイムアウト時間"
+            help="最適解を見つけるまでの最大計算時間"
         )
     
     st.sidebar.markdown("---")
@@ -371,7 +371,7 @@ def main():
                         start_time = time.time()
                         
                         # ソルバーの選択
-                        if solver_type == "OR-Tools (高速)" and ORTOOLS_AVAILABLE:
+                        if solver_type == "OR-Tools (推奨: 高精度)" and ORTOOLS_AVAILABLE:
                             solver = TimetableSolver(teachers, rooms, classes, lessons)
                             timetable = solver.solve(timeout_seconds=timeout)
                         else:

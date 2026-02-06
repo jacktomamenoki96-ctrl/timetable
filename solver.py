@@ -183,6 +183,8 @@ class TimetableSolver:
         # ソルバーの実行
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = timeout_seconds
+        solver.parameters.num_search_workers = 16  # 並列処理
+        solver.parameters.log_search_progress = True
         
         status = solver.Solve(self.model)
         
